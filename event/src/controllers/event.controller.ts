@@ -2,18 +2,7 @@ import { Request, Response } from 'express';
 import { createApiRoot } from '../client/create.client';
 import CustomError from '../errors/custom.error';
 import { logger } from '../utils/logger.utils';
-
-// Define interfaces for the order data
-interface LineItem {
-  productId: string;
-  [key: string]: any;
-}
-
-interface Order {
-  lineItems?: LineItem[];
-  customerId?: string;
-  [key: string]: any;
-}
+import { LineItem, Order } from '@commercetools/platform-sdk';
 
 // Parse the mapping from environment variable
 let productTypeToCustomerGroupMap: Record<string, string[]> = {};
@@ -22,10 +11,21 @@ try {
   productTypeToCustomerGroupMap = JSON.parse(mapString);
   logger.info('Successfully parsed product type to customer group mapping');
 } catch (error) {
-  logger.error('Failed to parse CGROUP_TO_PRODUCT_TYPE_MAP env variable', error);
-  // Set empty object as fallback
-  productTypeToCustomerGroupMap = {};
+  try {
+  const mapString = process.env.CGROUP_TO_PRODUCT_TYPE_MAP || '{}';
+
+    // If the first parse fails, try unescaping the string first
+    // This handles double-encoded JSON strings like "{\"key\":\"value\"}"
+    const unescaped = mapString.replace(/\\"/g, '"');
+    productTypeToCustomerGroupMap =  JSON.parse(unescaped);
+  } catch (nestedError) {
+    // If both parsing attempts fail, log the error and return an empty object
+    logger.error(`Failed to parse CGROUP_TO_PRODUCT_TYPE_MAP`);
+    productTypeToCustomerGroupMap = {};
+  }
 }
+
+console.log(productTypeToCustomerGroupMap);
 
 /**
  * Exposed event POST endpoint.
@@ -56,11 +56,14 @@ export const post = async (request: Request, response: Response) => {
     ? Buffer.from(pubSubMessage.data, 'base64').toString().trim()
     : undefined;
 
+
   if (!decodedData) {
     throw new CustomError(400, 'Bad request: No data in the Pub/Sub message');
   }
 
   const jsonData = JSON.parse(decodedData);
+
+  logger.info(jsonData);
 
   // Skip if message type is not OrderCreated
   if (jsonData.type !== 'OrderCreated') {
@@ -73,6 +76,7 @@ export const post = async (request: Request, response: Response) => {
     const order: Order = jsonData.order;
     
     if (!order) {
+      logger.error('No order data in the message');
       throw new CustomError(400, 'Bad request: No order data in the message');
     }
 
@@ -99,7 +103,7 @@ export const post = async (request: Request, response: Response) => {
     for (const [customerGroupId, productTypeIds] of Object.entries(productTypeToCustomerGroupMap)) {
       // Check if any product in the order matches the product types for this customer group
       const hasMatchingProduct = order.lineItems.some((lineItem: LineItem) => 
-        productTypeIds.includes(lineItem.productId)
+        productTypeIds.includes(lineItem.productType?.id)
       );
 
       if (hasMatchingProduct) {
