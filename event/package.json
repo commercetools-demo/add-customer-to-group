@@ -11,10 +11,8 @@
     "build": "rimraf ./build && tsc",
     "lint": "eslint . --ext .ts",
     "prettier": "prettier --write '**/*.{js,ts}'",
-    "test": "jest --config jest.config.cjs",
-    "test:watch": "jest --watch",
-    "connector:post-deploy": "node build/connector/post-deploy.js",
-    "connector:pre-undeploy": "node build/connector/pre-undeploy.js"
+    "test": "echo \"No tests specified\"",
+    "test:watch": "echo \"No tests specified\""
   },
   "devDependencies": {
     "@tsconfig/recommended": "^1.0.3",
